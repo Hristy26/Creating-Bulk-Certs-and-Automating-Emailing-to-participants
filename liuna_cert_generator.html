@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIUNA Certificate Generator</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; color: #1a1a1a; background: #f5f5f5; padding: 2rem; }
+#app { max-width: 860px; margin: 0 auto; }
+
+.drop-zone { border: 1.5px dashed #ccc; border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; background: #fafafa; }
+.drop-zone.drag-over { border-color: #3b82f6; background: #eff6ff; }
+.drop-zone p { font-size: 14px; color: #666; margin-top: 6px; }
+
+.section { margin-top: 1.5rem; }
+.section-label { font-size: 11px; font-weight: 500; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .07em; }
+.card { background: #fafafa; border: 0.5px solid #e0e0e0; border-radius: 12px; padding: 1rem 1.25rem; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; }
+label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+input[type=text] { width: 100%; padding: 7px 10px; font-size: 13px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a1a; }
+input:focus { outline: none; border-color: #888; }
+
+.btn { padding: 8px 18px; font-size: 13px; cursor: pointer; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a1a; transition: background .12s; }
+.btn:hover { background: #f0f0f0; }
+.btn.primary { background: #1a1a1a; color: #fff; border-color: transparent; }
+.btn.primary:hover { opacity: .85; }
+.btn:disabled { opacity: .4; cursor: default; }
+
+.group-card { background: #fff; border: 0.5px solid #e0e0e0; border-radius: 12px; padding: .9rem 1.1rem; margin-bottom: 8px; }
+.group-header { font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #f0f0f0; color: #666; }
+.cert-row { font-size: 12px; color: #666; padding: 3px 0; border-bottom: 0.5px solid #eee; }
+.cert-row:last-child { border-bottom: none; }
+
+.status-ok { font-size: 13px; color: #16a34a; margin-top: 6px; }
+.status-err { font-size: 13px; color: #dc2626; margin-top: 6px; }
+
+.col-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.col-table td { padding: 4px 8px; border-bottom: 0.5px solid #eee; }
+.col-table td:first-child { color: #888; width: 130px; }
+.col-table tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="section">
+    <div class="section-label">Step 1 — Upload CSV</div>
+    <div class="drop-zone" id="dropZone">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M8 10l4-4 4 4M12 6v10"/></svg>
+      <p><strong>Drag & drop your CSV</strong> or <span style="color:#3b82f6;cursor:pointer" onclick="document.getElementById('csvInput').click()">browse</span></p>
+      <p style="font-size:12px;margin-top:2px">No header row — columns auto-mapped</p>
+      <input type="file" id="csvInput" accept=".csv" style="display:none">
+    </div>
+    <div id="csvStatus"></div>
+  </div>
+
+  <div class="section" id="detectedSection" style="display:none">
+    <div class="section-label">Detected data (first row)</div>
+    <div class="card"><table class="col-table" id="detectedTable"></table></div>
+  </div>
+
+  <div class="section" id="detailsSection" style="display:none">
+    <div class="section-label">Step 2 — Certificate details</div>
+    <div class="card">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">Name, class, completion date, hours, and student number come from the CSV automatically.</div>
+      <div class="field-row">
+        <div><label>Director's name</label><input type="text" id="dirName" placeholder="e.g. Jane Smith"></div>
+        <div><label>Director's title</label><input type="text" id="dirTitle" placeholder="e.g. Director"></div>
+      </div>
+      <div class="field-row three">
+        <div><label>Organization name</label><input type="text" id="orgName" value="LIUNA Training of Michigan"></div>
+        <div><label>Address line</label><input type="text" id="orgAddr" value="11155 Beardslee Road"></div>
+        <div><label>City, State ZIP</label><input type="text" id="orgCity" value="Perry, MI 48872"></div>
+      </div>
+      <div class="field-row">
+        <div><label>Phone number</label><input type="text" id="orgPhone" value="(517) 625-4919"></div>
+        <div></div>
+      </div>
+      <div style="margin-top:4px"><button class="btn" onclick="refreshPreview()">Refresh preview</button></div>
+    </div>
+  </div>
+
+  <div class="section" id="previewSection" style="display:none">
+    <div class="section-label">Step 3 — Certificate preview</div>
+    <div style="border:0.5px solid #e0e0e0;border-radius:12px;overflow:hidden;background:#fff">
+      <div id="certPreviewArea"></div>
+    </div>
+    <div style="font-size:12px;color:#888;margin-top:6px" id="previewNote"></div>
+  </div>
+
+  <div class="section" id="generateSection" style="display:none">
+    <div class="section-label">Step 4 — Review & generate</div>
+    <div id="groupedList"></div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn primary" id="genBtn" onclick="generateAll()">Generate all PDFs</button>
+      <span id="genStatus"></span>
+    </div>
+  </div>
+
+</div>
+
+<canvas id="certCanvas" style="display:none" width="1122" height="794"></canvas>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// ── Column indices (0-based) from your CSV format ──────────────────────────
+const COL = {
+  CLASS_NAME: 2,
+  HOURS:      7,
+  DATE_END:   10,  // completion date only
+  MEMBER_ID:  11,
+  LAST_NAME:  12,
+  FIRST_NAME: 13
+};
+
+let csvRows = [], groups = {};
+
+// ── Drag & drop / file input ───────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('csvInput').addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file || !file.name.endsWith('.csv')) { setStatus('csvStatus', 'Please upload a .csv file.', true); return; }
+  const r = new FileReader();
+  r.onload = e => parseCSV(e.target.result, file.name);
+  r.readAsText(file);
+}
+
+function setStatus(id, msg, err) {
+  document.getElementById(id).innerHTML = `<div class="${err ? 'status-err' : 'status-ok'}">${msg}</div>`;
+}
+
+// ── CSV parsing (handles quoted fields with commas) ────────────────────────
+function parseCSVLine(line) {
+  const result = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseCSV(text, fname) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  csvRows = lines.map(l => parseCSVLine(l));
+  if (!csvRows.length) { setStatus('csvStatus', 'No data found.', true); return; }
+
+  setStatus('csvStatus', `✓ Loaded <strong>${csvRows.length}</strong> rows from <strong>${fname}</strong>`);
+
+  // Show detected columns from first row
+  const f = csvRows[0];
+  document.getElementById('detectedTable').innerHTML = [
+    ['Member ID',       f[COL.MEMBER_ID]],
+    ['First name',      f[COL.FIRST_NAME]],
+    ['Last name',       f[COL.LAST_NAME]],
+    ['Class name',      f[COL.CLASS_NAME]],
+    ['Completion date', f[COL.DATE_END]],
+    ['Hours',           f[COL.HOURS]]
+  ].map(([l, v]) => `<tr><td>${l}</td><td><strong>${v || '—'}</strong></td></tr>`).join('');
+
+  ['detectedSection', 'detailsSection', 'previewSection', 'generateSection']
+    .forEach(id => document.getElementById(id).style.display = '');
+
+  rebuildGroups();
+  refreshPreview();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function getName(row) {
+  const first = (row[COL.FIRST_NAME] || '').trim();
+  const last  = (row[COL.LAST_NAME]  || '').trim();
+  return toTitleCase((first + ' ' + last).trim() || 'Unknown');
+}
+
+function toTitleCase(s) {
+  return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  try {
+    const cleaned = d.replace(/^[A-Za-z]+,\s*/, ''); // strip weekday if present
+    const dt = new Date(cleaned);
+    if (!isNaN(dt)) return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  } catch {}
+  return d;
+}
+
+// ── Group rows by member ID ────────────────────────────────────────────────
+function rebuildGroups() {
+  groups = {};
+  csvRows.forEach(row => {
+    const mid = (row[COL.MEMBER_ID] || '').trim();
+    if (!mid) return;
+    const name  = getName(row);
+    const cls   = toTitleCase(row[COL.CLASS_NAME] || '');
+    const date  = row[COL.DATE_END]  || '';
+    const hours = row[COL.HOURS]     || '';
+    if (!groups[mid]) groups[mid] = { mid, name, certs: [] };
+    groups[mid].certs.push({ name, cls, date, hours, mid });
+  });
+
+  const list = document.getElementById('groupedList');
+  const keys = Object.keys(groups);
+  if (!keys.length) { list.innerHTML = '<div style="font-size:13px;color:#888">No data yet.</div>'; return; }
+
+  list.innerHTML = keys.map(k => {
+    const g = groups[k];
+    return `<div class="group-card">
+      <div class="group-header">
+        <span><strong>${g.name}</strong> <span style="font-size:12px;color:#888;font-weight:400">— ID: ${g.mid}</span></span>
+        <span class="badge">${g.certs.length} cert${g.certs.length > 1 ? 's' : ''}</span>
+      </div>
+      ${g.certs.map(c => `<div class="cert-row">${c.cls || '—'} — ${fmtDate(c.date)}${c.hours ? ' — ' + parseFloat(c.hours).toFixed(2) + ' hrs' : ''}</div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ── Text wrapping helper ───────────────────────────────────────────────────
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '', lines = [];
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = word; }
+    else { line = test; }
+  }
+  if (line) lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+  return lines.length;
+}
+
+// ── Certificate drawing ────────────────────────────────────────────────────
+function drawCert(ctx, W, H, name, cls, date, hours, memberId, dirName, dirTitle, orgName, orgAddr, orgCity, orgPhone) {
+  const cx = W / 2;
+
+  // White background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, W, H);
+
+  // Outer double border
+  ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 3;
+  ctx.strokeRect(20, 20, W - 40, H - 40);
+  ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 0.75;
+  ctx.strokeRect(32, 32, W - 64, H - 64);
+
+  // Organization name
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold 28px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText((orgName || 'LIUNA Training of Michigan').toUpperCase(), cx, 100);
+
+  ctx.font = '15px Arial, sans-serif';
+  ctx.fillStyle = '#444444';
+  ctx.fillText((orgAddr || '11155 Beardslee Road').toUpperCase(), cx, 125);
+  ctx.fillText((orgCity || 'Perry, MI 48872').toUpperCase(), cx, 145);
+
+  // Rule
+  ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 0.75;
+  ctx.beginPath(); ctx.moveTo(80, 162); ctx.lineTo(W - 80, 162); ctx.stroke();
+
+  // "Declares that"
+  ctx.fillStyle = '#888888';
+  ctx.font = 'italic 16px Georgia, serif';
+  ctx.fillText('DECLARES THAT', cx, 210);
+
+  // Recipient name
+  ctx.fillStyle = '#111111';
+  ctx.font = 'bold 52px Georgia, serif';
+  ctx.fillText(name || 'Recipient Name', cx, 285);
+
+  // Underline name
+  const nw = ctx.measureText(name || 'Recipient Name').width;
+  ctx.strokeStyle = '#AAAAAA'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - nw / 2, 296); ctx.lineTo(cx + nw / 2, 296); ctx.stroke();
+
+  // "On [date]"
+  ctx.fillStyle = '#888888';
+  ctx.font = 'italic 17px Georgia, serif';
+  ctx.fillText('ON ' + (fmtDate(date) || '—').toUpperCase(), cx, 345);
+
+  // Class name
+  ctx.fillStyle = '#111111';
+  ctx.font = 'bold 34px Georgia, serif';
+  ctx.fillText((cls || 'Course Name').toUpperCase(), cx, 400);
+
+  // Hours
+  ctx.fillStyle = '#444444';
+  ctx.font = '18px Arial, sans-serif';
+  const hoursStr = hours
+    ? `COMPLETED ${parseFloat(hours).toFixed(2)} HOURS OF TRAINING`
+    : 'COMPLETED TRAINING';
+  ctx.fillText(hoursStr, cx, 445);
+
+  // Light rule
+  ctx.strokeStyle = '#CCCCCC'; ctx.lineWidth = 0.75;
+  ctx.beginPath(); ctx.moveTo(80, 475); ctx.lineTo(W - 80, 475); ctx.stroke();
+
+  // ── Two-column signature area ──────────────────────────────────────────
+  // Left: Student Number  |  Right: Director
+  const sigLineY = 570;
+  const colW     = 260;
+  const gap      = 80;
+  const totalW   = colW + gap + colW;
+  const leftX    = cx - totalW / 2;
+  const rightX   = leftX + colW + gap;
+  const leftCx   = leftX  + colW / 2;
+  const rightCx  = rightX + colW / 2;
+
+  // Left column — Student Number
+  ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(leftX, sigLineY); ctx.lineTo(leftX + colW, sigLineY); ctx.stroke();
+
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold 16px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(memberId || '—', leftCx, sigLineY - 12);
+
+  ctx.fillStyle = '#666666';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.fillText('STUDENT NUMBER', leftCx, sigLineY + 18);
+
+  // Right column — Director
+  ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(rightX, sigLineY); ctx.lineTo(rightX + colW, sigLineY); ctx.stroke();
+
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold 16px Georgia, serif';
+  ctx.fillText(dirName || 'Director Name', rightCx, sigLineY - 12);
+
+  ctx.fillStyle = '#666666';
+  ctx.font = '13px Arial, sans-serif';
+  ctx.fillText((dirTitle || 'DIRECTOR').toUpperCase(), rightCx, sigLineY + 18);
+
+  // ── Disclaimer ────────────────────────────────────────────────────────
+  ctx.fillStyle = '#999999';
+  ctx.font = '9.5px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  const disc = 'The ' + (orgName || 'LIUNA Training of Michigan') +
+    ' is not, and should not be construed as, a substitute for an employer\'s obligation under OSHA or EPA to provide employees with safety training specific to the nature of the employee\'s job and pertinent to the actual equipment and machinery with which the employee will be working while in the contractor\'s employment.';
+  wrapText(ctx, disc, cx, 625, W - 160, 14);
+
+  // Phone
+  ctx.fillStyle = '#AAAAAA';
+  ctx.font = '11px Arial, sans-serif';
+  ctx.fillText(orgPhone || '', cx, 688);
+}
+
+// ── Preview ────────────────────────────────────────────────────────────────
+function refreshPreview() {
+  const canvas = document.getElementById('certCanvas');
+  const ctx    = canvas.getContext('2d');
+  const row    = csvRows[0];
+  if (!row) return;
+
+  drawCert(ctx, 1122, 794,
+    getName(row),
+    toTitleCase(row[COL.CLASS_NAME] || ''),
+    row[COL.DATE_END]  || '',
+    row[COL.HOURS]     || '',
+    row[COL.MEMBER_ID] || '',
+    document.getElementById('dirName').value  || 'Director Name',
+    document.getElementById('dirTitle').value || 'Director',
+    document.getElementById('orgName').value  || 'LIUNA Training of Michigan',
+    document.getElementById('orgAddr').value  || '11155 Beardslee Road',
+    document.getElementById('orgCity').value  || 'Perry, MI 48872',
+    document.getElementById('orgPhone').value || '(517) 625-4919'
+  );
+
+  const img = document.createElement('img');
+  img.src = canvas.toDataURL();
+  img.style.cssText = 'width:100%;display:block;';
+  const area = document.getElementById('certPreviewArea');
+  area.innerHTML = '';
+  area.appendChild(img);
+  document.getElementById('previewNote').textContent =
+    `Showing: ${getName(row)} — ${toTitleCase(row[COL.CLASS_NAME] || '')}`;
+}
+
+// Auto-refresh preview when org fields change
+['dirName', 'dirTitle', 'orgName', 'orgAddr', 'orgCity', 'orgPhone'].forEach(id => {
+  document.getElementById(id).addEventListener('input', refreshPreview);
+});
+
+// ── Generate all PDFs ──────────────────────────────────────────────────────
+async function generateAll() {
+  const keys = Object.keys(groups);
+  if (!keys.length) {
+    document.getElementById('genStatus').innerHTML = '<span class="status-err">No data loaded.</span>';
+    return;
+  }
+
+  const btn    = document.getElementById('genBtn');
+  const status = document.getElementById('genStatus');
+  btn.disabled = true;
+
+  const canvas = document.getElementById('certCanvas');
+  const ctx    = canvas.getContext('2d');
+  const { jsPDF } = window.jspdf;
+
+  const dir   = document.getElementById('dirName').value  || 'Director Name';
+  const dirT  = document.getElementById('dirTitle').value || 'Director';
+  const org   = document.getElementById('orgName').value  || 'LIUNA Training of Michigan';
+  const addr  = document.getElementById('orgAddr').value  || '11155 Beardslee Road';
+  const city  = document.getElementById('orgCity').value  || 'Perry, MI 48872';
+  const phone = document.getElementById('orgPhone').value || '(517) 625-4919';
+
+  let done = 0;
+
+  for (const key of keys) {
+    const g = groups[key];
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1122, 794] });
+
+    g.certs.forEach((cert, i) => {
+      if (i > 0) pdf.addPage();
+      drawCert(ctx, 1122, 794,
+        cert.name, cert.cls, cert.date, cert.hours, cert.mid,
+        dir, dirT, org, addr, city, phone
+      );
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.97), 'JPEG', 0, 0, 1122, 794);
+    });
+
+    // Filename: cert_FirstName_LastName_MemberID.pdf
+    const safeName = (g.name + '_' + g.mid).replace(/[^a-zA-Z0-9_-]/g, '_');
+    pdf.save(`cert_${safeName}.pdf`);
+    done++;
+    status.innerHTML = `<span style="font-size:13px;color:#888">Generating ${done}/${keys.length}…</span>`;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  btn.disabled = false;
+  status.innerHTML = `<span class="status-ok">✓ ${done} PDF${done > 1 ? 's' : ''} generated.</span>`;
+}
+</script>
+</body>
+</html>
